@@ -1,42 +1,45 @@
-"""Best-effort placeholder for a later balance check.
-
-The workshop reward flow does not depend on this file. Keep it small and edit the
-endpoint once Cantor8 confirms the exact balance API for your party/account.
-"""
+"""Check CC balance for a party created by src/main.py."""
 
 from __future__ import annotations
 
+import json
 import os
+import sys
+from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from main import check_balance, get_access_token, load_settings
 
 
 def main() -> int:
     load_dotenv()
     party_id = os.getenv("PARTY_ID", "").strip()
-    api_base = os.getenv(
-        "VALIDATOR_API_BASE", "https://api.validator.dev.digik.cantor8.tech/api/validator"
-    ).rstrip("/")
-
     if not party_id:
         print("Set PARTY_ID in .env after src/main.py prints one.")
         return 1
 
-    print("Balance check placeholder")
-    print(f"Party ID: {party_id}")
-    print(f"Validator API base: {api_base}")
-    print("Ask Cantor8 for the exact balance endpoint, then add it here.")
-
-    # Example shape only. Do not treat this as confirmed workshop API.
-    # with httpx.Client(timeout=30) as client:
-    #     response = client.get(f"{api_base}/v0/...")
-    #     print(response.status_code)
-    #     print(response.text)
-
-    return 0
+    try:
+        settings = load_settings(None)
+        timeout = httpx.Timeout(settings.http_timeout_seconds)
+        with httpx.Client(timeout=timeout) as client:
+            token, auth_candidate = get_access_token(client, settings)
+            print(f"Auth: {auth_candidate}")
+            print(f"Party ID: {party_id}")
+            result = check_balance(client, settings, token, party_id)
+            if result.get("balance_error"):
+                return 1
+            balance = result.get("balance_response", {})
+            print()
+            print(f"Total available CC: {balance.get('total_available_coin', 'unknown')}")
+            print(json.dumps(balance, indent=2))
+            return 0
+    except Exception as exc:
+        print(f"ERROR: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
